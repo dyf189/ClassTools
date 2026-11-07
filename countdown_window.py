@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""倒计时模块：主窗口（普通倒计时 + 默认隐藏的高考倒计时页）"""
+"""倒计时模块：主窗口（含“是否显示倒计时”开关）"""
 from datetime import datetime, timedelta
 
 from PyQt5.QtCore import Qt, QTimer
@@ -14,22 +14,16 @@ from desktop_cleanup import DesktopCleanupManager
 from settings_dialog import SettingsDialog
 from win_helpers import hide_from_taskbar
 
-# 隐藏页切换手势：2 秒内连点 5 次，或按 Ctrl+Alt+G
-GAOKAO_SWITCH_CLICKS = 5
-GAOKAO_SWITCH_INTERVAL_MS = 2000
-
 
 # ---------- 主窗口 ----------
 class CountdownWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.oldPos = None
-        self.show_gaokao = False          # 是否显示隐藏的高考倒计时页
-        self._click_times = []            # 用于识别连点手势
         self.target_time = datetime.now()
         self.display_mode = "auto"
         self.prefix_text = ""
-        self.gaokao_config = {}
+        self.countdown_visible = True   # 是否在屏幕上显示倒计时
 
         # 各功能模块的管理器
         self.shutdown_scheduler = ShutdownScheduler(on_action=self.on_shutdown_task_fired)
@@ -45,12 +39,13 @@ class CountdownWindow(QMainWindow):
 
         # 在窗口完全初始化后再尝试隐藏任务栏
         hide_from_taskbar(self)
+        # hide_from_taskbar 内部会强制 show 一次窗口，这里按开关重新套用显示状态
+        self.apply_visibility()
 
     def init_ui(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setFixedSize(1200, 200)
         self.setWindowTitle("倒计时")
-        self.setFocusPolicy(Qt.StrongFocus)
 
         self.label = QLabel('加载中...', self)
         self.label.setAlignment(Qt.AlignCenter)
@@ -65,6 +60,8 @@ class CountdownWindow(QMainWindow):
         tray_menu = QMenu()
         setting_action = tray_menu.addAction("设置")
         setting_action.triggered.connect(self.show_settings)
+        self.visibility_action = tray_menu.addAction("隐藏倒计时")
+        self.visibility_action.triggered.connect(self.toggle_countdown_visible)
         tray_menu.addSeparator()
         exit_action = tray_menu.addAction("退出")
         exit_action.triggered.connect(self.close_app)
@@ -83,13 +80,13 @@ class CountdownWindow(QMainWindow):
         try:
             config = ConfigManager.load_config()
 
-            # 普通倒计时
+            # 倒计时
             self.target_time = self._parse_target(config.get("target_time", ""))
             self.prefix_text = config.get("prefix_text", "")
             self.display_mode = config.get("display_mode", "auto")
 
-            # 隐藏页（高考倒计时）
-            self.gaokao_config = dict(config.get("gaokao") or {})
+            # 是否显示倒计时
+            self.countdown_visible = bool(config.get("show_countdown", True))
 
             # 样式
             style = config.get("style", {})
@@ -122,6 +119,9 @@ class CountdownWindow(QMainWindow):
             # 立即刷新倒计时
             self.update_countdown()
 
+            # 套用显示/隐藏状态
+            self.apply_visibility()
+
         except Exception as e:
             print(f"应用设置时出错: {e}")
 
@@ -150,80 +150,57 @@ class CountdownWindow(QMainWindow):
         except Exception:
             pass
 
+    # ---------- 显示/隐藏倒计时 ----------
+    def apply_visibility(self):
+        """按开关显示或隐藏倒计时窗口（隐藏后程序仍驻留托盘）"""
+        self.setVisible(bool(self.countdown_visible))
+        if hasattr(self, 'visibility_action'):
+            self.visibility_action.setText(
+                "隐藏倒计时" if self.countdown_visible else "显示倒计时"
+            )
+
+    def toggle_countdown_visible(self):
+        """托盘菜单中的显示/隐藏快捷开关"""
+        self.countdown_visible = not self.countdown_visible
+        try:
+            ConfigManager.update_config({"show_countdown": self.countdown_visible})
+        except Exception as e:
+            print(f"保存显示开关失败: {e}")
+        self.apply_visibility()
+        print("倒计时已显示" if self.countdown_visible else "倒计时已隐藏（托盘仍可找回）")
+
     # ---------- 倒计时显示 ----------
     def update_countdown(self):
-        """更新倒计时显示（普通页 / 隐藏的高考页）"""
+        """更新倒计时显示"""
         try:
-            if self.show_gaokao:
-                prefix = self.gaokao_config.get("prefix_text", "距离高考还有")
-                target = self._parse_target(self.gaokao_config.get("target_time", ""))
-                mode = self.gaokao_config.get("display_mode", "days_only")
-            else:
-                prefix = self.prefix_text
-                target = self.target_time
-                mode = self.display_mode
-
             now = datetime.now()
-            delta = target - now
+            delta = self.target_time - now
             total_seconds = delta.total_seconds()
 
             if total_seconds <= 0:
-                self.label.setText(f"{prefix}0天 (已经到达)")
+                self.label.setText(f"{self.prefix_text}0天 (已经到达)")
                 return
 
-            if mode == "days_only":
-                self.label.setText(f"{prefix}{delta.days}天")
-            elif mode == "days_hours":
+            if self.display_mode == "days_only":
+                self.label.setText(f"{self.prefix_text}{delta.days}天")
+            elif self.display_mode == "days_hours":
                 days = delta.days
                 hours = delta.seconds // 3600
-                self.label.setText(f"{prefix}{days}天{hours}小时")
+                self.label.setText(f"{self.prefix_text}{days}天{hours}小时")
             else:  # auto
                 if total_seconds < 86400:  # 小于1天
                     hours = total_seconds // 3600
                     minutes = (total_seconds % 3600) // 60
                     seconds = total_seconds % 60
                     if hours > 0:
-                        self.label.setText(f"{prefix}{int(hours)}小时{int(minutes)}分钟")
+                        self.label.setText(f"{self.prefix_text}{int(hours)}小时{int(minutes)}分钟")
                     else:
-                        self.label.setText(f"{prefix}{int(minutes)}分钟{int(seconds)}秒")
+                        self.label.setText(f"{self.prefix_text}{int(minutes)}分钟{int(seconds)}秒")
                 else:
-                    self.label.setText(f"{prefix}{delta.days}天")
+                    self.label.setText(f"{self.prefix_text}{delta.days}天")
 
         except Exception as e:
             print(f"更新倒计时出错: {e}")
-
-    # ---------- 隐藏高考倒计时页的切换 ----------
-    def toggle_gaokao_page(self):
-        """在普通倒计时与隐藏的高考倒计时页之间切换"""
-        self.show_gaokao = not self.show_gaokao
-        self.update_countdown()
-        tip = "已切换到高考倒计时（隐藏页）" if self.show_gaokao else "已切换回普通倒计时"
-        print(tip)
-        try:
-            self.tray_icon.showMessage("ClassTools", tip, QSystemTrayIcon.Information, 1500)
-        except Exception:
-            pass
-
-    def _register_click(self):
-        """记录点击，2 秒内连点 5 次切换隐藏页"""
-        now = datetime.now()
-        self._click_times = [
-            t for t in self._click_times
-            if (now - t).total_seconds() <= GAOKAO_SWITCH_INTERVAL_MS / 1000.0
-        ]
-        self._click_times.append(now)
-        if len(self._click_times) >= GAOKAO_SWITCH_CLICKS:
-            self._click_times = []
-            self.toggle_gaokao_page()
-
-    def keyPressEvent(self, event):
-        # Ctrl + Alt + G 同样可以切换隐藏页
-        if (event.key() == Qt.Key_G
-                and (event.modifiers() & Qt.ControlModifier)
-                and (event.modifiers() & Qt.AltModifier)):
-            self.toggle_gaokao_page()
-        else:
-            super().keyPressEvent(event)
 
     # ---------- 关闭 ----------
     def close_app(self):
@@ -241,7 +218,6 @@ class CountdownWindow(QMainWindow):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.oldPos = event.globalPos()
-            self._register_click()
 
     def mouseMoveEvent(self, event):
         if self.oldPos is not None:

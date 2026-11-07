@@ -2,7 +2,7 @@
 """ClassTools 程序入口
 
 模块划分：
-  countdown_window.py  倒计时（主窗口 + 隐藏的高考倒计时页）
+  countdown_window.py  倒计时（主窗口，含显示/隐藏开关）
   shutdown_manager.py  定时关机（多条任务，调用系统 API）
   desktop_cleanup.py   桌面清理（每周定时搬运桌面文件）
   settings_dialog.py   设置（整合上面各模块的设置页）
@@ -29,7 +29,7 @@ def main():
         app.setStyle('Fusion')
 
         window = CountdownWindow()
-        window.show()
+        # 倒计时窗口的显示/隐藏由“是否显示倒计时”开关决定，不在这里强制 show
 
         print("程序已启动，右键系统托盘图标可进行设置")
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""设置模块：基本设置（倒计时 + 隐藏页）、定时关机、桌面清理、外观设置"""
+"""设置模块：基本设置（倒计时 + 显示开关）、定时关机、桌面清理、外观设置"""
 import json
 from datetime import datetime, timedelta
 
@@ -9,15 +9,13 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QWidget, QDialogButtonBox,
     QFormLayout, QSpinBox, QGridLayout, QSlider,
     QColorDialog, QMessageBox, QLineEdit, QComboBox,
-    QGroupBox, QTabWidget
+    QTabWidget, QCheckBox
 )
 from PyQt5.QtGui import QColor
 
 from app_config import ConfigManager, parse_iso_datetime
 from shutdown_manager import ShutdownTasksWidget
 from desktop_cleanup import DesktopCleanupWidget
-
-GAOKAO_DEFAULT_DATETIME = datetime(2027, 6, 7, 9, 0, 0)
 
 
 # ---------- 设置对话框 ----------
@@ -81,24 +79,9 @@ class SettingsDialog(QDialog):
         self.font_size_spin.setSuffix(" px")
         layout.addRow("字体大小：", self.font_size_spin)
 
-        # 隐藏页：高考倒计时
-        gaokao_group = QGroupBox("隐藏页：高考倒计时（默认不在主界面显示）")
-        gaokao_form = QFormLayout(gaokao_group)
-
-        self.gaokao_prefix_input = QLineEdit()
-        self.gaokao_prefix_input.setPlaceholderText("例如：距离高考还有")
-        gaokao_form.addRow("显示前缀：", self.gaokao_prefix_input)
-
-        self.gaokao_date_edit = QDateTimeEdit()
-        self.gaokao_date_edit.setCalendarPopup(True)
-        self.gaokao_date_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        gaokao_form.addRow("目标时间：", self.gaokao_date_edit)
-
-        hint = QLabel("切换方式：在倒计时窗口 2 秒内快速连点 5 次，或按 Ctrl+Alt+G")
-        hint.setWordWrap(True)
-        gaokao_form.addRow("", hint)
-
-        layout.addRow(gaokao_group)
+        # 是否显示倒计时
+        self.show_countdown_check = QCheckBox("在屏幕上显示倒计时（隐藏后程序仍驻留系统托盘）")
+        layout.addRow("", self.show_countdown_check)
 
         tab.setLayout(layout)
 
@@ -151,18 +134,8 @@ class SettingsDialog(QDialog):
             if idx >= 0:
                 self.display_mode_combo.setCurrentIndex(idx)
 
-            # 加载隐藏页（高考倒计时）
-            gaokao = config.get("gaokao") or {}
-            self.gaokao_prefix_input.setText(gaokao.get("prefix_text", "距离高考还有"))
-            try:
-                gaokao_time = gaokao.get("target_time", "")
-                if gaokao_time:
-                    self.gaokao_date_edit.setDateTime(parse_iso_datetime(gaokao_time))
-                else:
-                    self.gaokao_date_edit.setDateTime(GAOKAO_DEFAULT_DATETIME)
-            except Exception as e:
-                print(f"加载高考倒计时失败: {e}")
-                self.gaokao_date_edit.setDateTime(GAOKAO_DEFAULT_DATETIME)
+            # 加载显示开关
+            self.show_countdown_check.setChecked(config.get("show_countdown", True))
 
             # 加载样式设置
             style = config.get("style", {})
@@ -215,15 +188,9 @@ class SettingsDialog(QDialog):
         try:
             # 收集所有设置
             target_datetime = self.datetime_edit.dateTime().toPyDateTime()
-            gaokao_datetime = self.gaokao_date_edit.dateTime().toPyDateTime()
 
-            # 保留各配置段里未在界面上编辑的字段
+            # 保留清理设置里未在界面上编辑的字段（如 last_run_date）
             current = ConfigManager.load_config()
-
-            gaokao_cfg = dict(current.get("gaokao") or {})
-            gaokao_cfg["target_time"] = gaokao_datetime.isoformat()
-            gaokao_cfg["prefix_text"] = self.gaokao_prefix_input.text() or "距离高考还有"
-
             cleanup_cfg = dict(current.get("desktop_cleanup") or {})
             cleanup_cfg.update(self.cleanup_widget.get_config())
 
@@ -231,7 +198,7 @@ class SettingsDialog(QDialog):
                 "target_time": target_datetime.isoformat(),
                 "prefix_text": self.prefix_input.text(),
                 "display_mode": self.display_mode_combo.currentData(),
-                "gaokao": gaokao_cfg,
+                "show_countdown": self.show_countdown_check.isChecked(),
                 "shutdown_tasks": self.shutdown_widget.get_tasks(),
                 "desktop_cleanup": cleanup_cfg,
                 "style": {

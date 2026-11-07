@@ -5,7 +5,7 @@
 ## 功能模块
 ### 1. 倒计时（countdown_window.py）
 - 设置精确到日/时或者自动调整的考试/重大事件倒计时
-- **隐藏高考倒计时页**：默认不显示，在倒计时窗口上 **2 秒内快速连点 5 次** 或按 **Ctrl+Alt+G** 即可在普通倒计时与高考倒计时之间切换（切换时托盘会有提示）
+- **是否显示倒计时的开关**：设置 → 基本设置 可勾选“在屏幕上显示倒计时”；托盘菜单也有“显示/隐藏倒计时”快捷开关（隐藏后程序仍驻留托盘，随时找回）
 
 ### 2. 定时关机（shutdown_manager.py）
 - 支持添加**多条**定时关机任务，每条可设置：名称、触发时间、生效星期（周一~周日）、执行动作（关机/重启/睡眠）、是否启用
@@ -35,7 +35,7 @@ install.bat   # 创建开机自启快捷方式
 ## 配置文件
 所有设置保存在运行目录的 `countdown_config.json`，主要字段：
 - `target_time` / `prefix_text` / `display_mode`：普通倒计时
-- `gaokao`：隐藏页高考倒计时的目标时间与前缀
+- `show_countdown`：是否在屏幕上显示倒计时
 - `shutdown_tasks`：定时关机任务列表（name/time/days/action/enabled）
 - `desktop_cleanup`：桌面清理设置（enabled/day_of_week/backup_dir/extensions）
 - `style`：字体大小、颜色、透明度

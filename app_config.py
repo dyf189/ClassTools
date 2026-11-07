@@ -40,15 +40,11 @@ class ConfigManager:
         "window_pos": [100, 100],
         "prefix_text": "距离中考还有",
         "display_mode": "auto",
+        # 是否在屏幕上显示倒计时（关闭后程序仍驻留系统托盘）
+        "show_countdown": True,
         # 旧版每日关机字段（仅保留用于迁移旧配置文件，新版本不再直接使用）
         "auto_shutdown_enabled": True,
         "shutdown_time": "21:00",
-        # 隐藏页：高考倒计时（默认不在主界面显示）
-        "gaokao": {
-            "target_time": "2027-06-07T09:00:00",
-            "prefix_text": "距离高考还有",
-            "display_mode": "days_only",
-        },
         # 定时关机任务列表（新版支持多条）
         "shutdown_tasks": [],
         # 桌面清理
